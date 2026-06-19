@@ -1,6 +1,8 @@
 import { useState, useRef } from "react";
 import { motion, useInView } from "motion/react";
-import { CheckCircle, Mail, Phone, MapPin, Clock } from "lucide-react";
+import { CheckCircle, Mail, Phone, MapPin, Clock, Loader2 } from "lucide-react";
+import emailjs from "@emailjs/browser";
+import { EMAILJS_CONFIG, isEmailJSConfigured } from "../lib/emailjs";
 
 const fadeUp = { hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0, transition: { duration: 0.5 } } };
 const stagger = { visible: { transition: { staggerChildren: 0.1 } } };
@@ -31,6 +33,8 @@ const budgets = ["Under £300", "£300–£500", "£500–£750", "£750–£1,0
 
 export function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
   const [form, setForm] = useState<FormState>({
     name: "", businessName: "", email: "", phone: "", website: "",
     socialLinks: "", service: "", budget: "", goals: "", message: "",
@@ -49,11 +53,50 @@ export function ContactPage() {
     return e;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const e2 = validate();
     if (Object.keys(e2).length > 0) { setErrors(e2); return; }
-    setSubmitted(true);
+
+    setSending(true);
+    setSendError("");
+
+    const templateParams = {
+      name: form.name,
+      business_name: form.businessName,
+      email: form.email,
+      phone: form.phone || "Not provided",
+      website: form.website || "Not provided",
+      social_links: form.socialLinks || "Not provided",
+      service: form.service,
+      budget: form.budget || "Not specified",
+      goals: form.goals || "Not specified",
+      message: form.message,
+      contact_pref: form.contactPref,
+    };
+
+    if (!isEmailJSConfigured()) {
+      // Dev mode: log to console and show success so the UI can be tested
+      console.log("EmailJS not configured — form submission (dev preview):", templateParams);
+      setSending(false);
+      setSubmitted(true);
+      return;
+    }
+
+    try {
+      await emailjs.send(
+        EMAILJS_CONFIG.SERVICE_ID,
+        EMAILJS_CONFIG.ENQUIRY_TEMPLATE_ID,
+        templateParams,
+        { publicKey: EMAILJS_CONFIG.PUBLIC_KEY }
+      );
+      setSubmitted(true);
+    } catch (err) {
+      console.error("EmailJS error:", err);
+      setSendError("Something went wrong sending your message. Please email us directly at walvinmediagroup@gmail.com.");
+    } finally {
+      setSending(false);
+    }
   };
 
   const field = (key: keyof FormState, value: string) => {
@@ -290,12 +333,23 @@ export function ContactPage() {
                   </div>
                   {errors.consent && <p className="text-xs" style={{ color: "var(--destructive)", fontFamily: "var(--font-body)" }}>{errors.consent}</p>}
 
+                  {sendError && (
+                    <p className="text-sm rounded-xl px-4 py-3" style={{ background: "#fef2f2", color: "var(--destructive)", fontFamily: "var(--font-body)", border: "1px solid #fecaca" }}>
+                      {sendError}
+                    </p>
+                  )}
+
                   <button
                     type="submit"
-                    className="w-full py-3.5 rounded-xl font-semibold transition-all hover:-translate-y-px"
+                    disabled={sending}
+                    className="w-full py-3.5 rounded-xl font-semibold transition-all hover:-translate-y-px flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:translate-y-0"
                     style={{ background: "var(--charcoal-dark)", color: "#fff", fontFamily: "var(--font-body)" }}
                   >
-                    Send enquiry
+                    {sending ? (
+                      <><Loader2 size={16} className="animate-spin" /> Sending…</>
+                    ) : (
+                      "Send enquiry"
+                    )}
                   </button>
                 </motion.form>
               )}

@@ -5,8 +5,10 @@ import {
   ArrowUpRight, MapPin, Calendar, BarChart2, Heart, Clock,
   CheckCircle, ChevronDown, ChevronUp,
   Users, FileText, MessageCircle, Zap, TrendingUp,
-  Play
+  Play, Loader2
 } from "lucide-react";
+import emailjs from "@emailjs/browser";
+import { EMAILJS_CONFIG, isEmailJSConfigured } from "../lib/emailjs";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -147,11 +149,47 @@ const steps = [
 
 export function HomePage() {
   const [auditSubmitted, setAuditSubmitted] = useState(false);
+  const [auditSending, setAuditSending] = useState(false);
+  const [auditError, setAuditError] = useState("");
   const [auditForm, setAuditForm] = useState({ name: "", businessName: "", email: "", phone: "", website: "", socialLink: "", challenge: "", contactPref: "email", consent: false });
 
-  const handleAuditSubmit = (e: React.FormEvent) => {
+  const handleAuditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAuditSubmitted(true);
+    setAuditSending(true);
+    setAuditError("");
+
+    const templateParams = {
+      name: auditForm.name,
+      business_name: auditForm.businessName,
+      email: auditForm.email,
+      phone: auditForm.phone || "Not provided",
+      website: auditForm.website || "Not provided",
+      social_link: auditForm.socialLink,
+      challenge: auditForm.challenge,
+      contact_pref: auditForm.contactPref,
+    };
+
+    if (!isEmailJSConfigured()) {
+      console.log("EmailJS not configured — audit submission (dev preview):", templateParams);
+      setAuditSending(false);
+      setAuditSubmitted(true);
+      return;
+    }
+
+    try {
+      await emailjs.send(
+        EMAILJS_CONFIG.SERVICE_ID,
+        EMAILJS_CONFIG.AUDIT_TEMPLATE_ID,
+        templateParams,
+        { publicKey: EMAILJS_CONFIG.PUBLIC_KEY }
+      );
+      setAuditSubmitted(true);
+    } catch (err) {
+      console.error("EmailJS error:", err);
+      setAuditError("Something went wrong. Please email us directly at walvinmediagroup@gmail.com.");
+    } finally {
+      setAuditSending(false);
+    }
   };
 
   return (
@@ -561,12 +599,22 @@ export function HomePage() {
                     I agree to my details being used to send the audit and respond to this enquiry. See the <Link to="/privacy-policy" className="underline">Privacy Policy</Link>.
                   </label>
                 </div>
+                {auditError && (
+                  <p className="text-sm px-4 py-3 rounded-xl" style={{ background: "rgba(200,62,62,0.15)", color: "#fca5a5", fontFamily: "var(--font-body)", border: "1px solid rgba(200,62,62,0.3)" }}>
+                    {auditError}
+                  </p>
+                )}
                 <button
                   type="submit"
-                  className="w-full py-3.5 rounded-xl font-semibold transition-all hover:-translate-y-px"
+                  disabled={auditSending}
+                  className="w-full py-3.5 rounded-xl font-semibold transition-all hover:-translate-y-px flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:translate-y-0"
                   style={{ background: "var(--lime)", color: "var(--charcoal)", fontFamily: "var(--font-body)" }}
                 >
-                  Request my free audit
+                  {auditSending ? (
+                    <><Loader2 size={16} className="animate-spin" /> Sending…</>
+                  ) : (
+                    "Request my free audit"
+                  )}
                 </button>
               </motion.form>
             )}
